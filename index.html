@@ -1307,7 +1307,7 @@ async function borrarTodosEntregados() {
  const r = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`,
  { headers: { 'X-Master-Key': JSONBIN_API_KEY } });
  const j = await r.json();
- j.record.comandas = j.record.comandas.filter(c => !c.lista);
+ j.record.comandas = j.record.comandas.filter(c => !c.recogida);
  await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
  method: 'PUT',
  headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY },
