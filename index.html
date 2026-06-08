@@ -779,7 +779,7 @@
 <!-- MODAL COBRO -->
 <div class="modal-overlay hidden" id="modalCobro">
  <div class="modal-box">
- <h2> COBRADO</h2>
+ <h2>COBRAR</h2>
  <div class="modal-resumen" id="modalResumen"></div>
  <div class="modal-total" id="modalTotal"></div>
  <div class="modal-cambio-big" id="modalCambio"></div>
@@ -1148,10 +1148,20 @@ function abrirModalCobro() {
 
 function cerrarModal() { document.getElementById('modalCobro').classList.add('hidden'); }
 
+const SUMUP_AFFILIATE_KEY = 'sup_afk_cTUj6qHFVz6DQhcRbnC2lGA7ejOh1yol';
+const SUMUP_APP_ID = 'https://avltp-almacen.github.io/crv-comandero/';
+
 function cobrarConSumup() {
   const c = getComanda(); if (!c) return;
   const total = calcTotal(c);
-  window.location.href = `sumupmerchant://pay?amount=${total.toFixed(2)}&currency=EUR&title=${encodeURIComponent(c.nombre)}`;
+  const url = `sumupmerchant://pay/1.0`
+    + `?affiliate-key=${SUMUP_AFFILIATE_KEY}`
+    + `&app-id=${encodeURIComponent(SUMUP_APP_ID)}`
+    + `&total=${total.toFixed(2)}`
+    + `&currency=EUR`
+    + `&title=${encodeURIComponent(c.nombre)}`
+    + `&callback=${encodeURIComponent(SUMUP_APP_ID)}`;
+  window.location.href = url;
 }
 
 function cerrarYNueva() {
