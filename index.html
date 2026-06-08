@@ -888,7 +888,8 @@ function entrar() {
     renderProductos();
     crearComanda('Mesa 1');
     pedirPermiso();
-    setInterval(pollingCamarero, 5000);
+    // Inicializar con las ya listas para no notificar las antiguas
+    inicializarPolling().then(() => setInterval(pollingCamarero, 5000));
   } else {
     badge.textContent = '🔥 Plancha';
     badge.className = 'badge-rol badge-plancha';
@@ -1312,13 +1313,8 @@ async function enviarAPlancha() {
 // ── UTILIDADES ────────────────────────────────────────────────
 function fmt(n) { return n.toFixed(2).replace('.', ',') + ' €'; }
 
-// ── NOTIFICACIONES NATIVAS ────────────────────────────────────
-async function pedirPermiso() {
-  if (!('Notification' in window)) return;
-  if (Notification.permission === 'default') {
-    await Notification.requestPermission();
-  }
-}
+// ── NOTIFICACIONES ───────────────────────────────────────────
+async function pedirPermiso() { /* no-op, no usamos push */ }
 
 function notificar(titulo, cuerpo) {
   // Vibración
@@ -1372,11 +1368,20 @@ function mostrarAvisoPantalla(titulo, cuerpo) {
 }
 
 // ── POLLING CAMARERO (detectar comandas listas) ───────────────
-let comandasEnviadas = new Set(); // IDs que el camarero ha enviado
 let comandasYaNotificadas = new Set(); // IDs ya notificados
 
-function registrarEnviada(id) {
-  comandasEnviadas.add(id);
+function registrarEnviada(id) { /* ya no necesario */ }
+
+async function inicializarPolling() {
+  try {
+    const r = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`,
+      { headers: { 'X-Master-Key': JSONBIN_API_KEY } });
+    const j = await r.json();
+    // Marcar todas las ya listas para no notificarlas al arrancar
+    (j.record.comandas || []).forEach(c => {
+      if (c.lista) comandasYaNotificadas.add(c.id);
+    });
+  } catch(e) {}
 }
 
 async function pollingCamarero() {
@@ -1389,8 +1394,7 @@ async function pollingCamarero() {
     comandasRemota.forEach(c => {
       if (
         c.lista &&
-        c.camarero === miNombre &&
-        comandasEnviadas.has(c.id) &&
+        c.camarero.toLowerCase().trim() === miNombre.toLowerCase().trim() &&
         !comandasYaNotificadas.has(c.id)
       ) {
         comandasYaNotificadas.add(c.id);
