@@ -655,6 +655,11 @@
     margin-bottom: 12px; text-align: center;
   }
 
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
   @keyframes pop {
     0% { transform: scale(1); }
     50% { transform: scale(1.18); }
@@ -807,8 +812,6 @@
 // ── CONFIGURACIÓN ─────────────────────────────────────────────
 const JSONBIN_BIN_ID  = '6a25e197f5f4af5e29c814d5';
 const JSONBIN_API_KEY = '$2a$10$alWyaTYtElv0d6TVz6iP/eRK88JejoefJOzBOeVNTTE0fkBGN5gTS';
-const NTFY_BASE       = 'https://ntfy.sh/fiestas-moratalaz';
-
 const BOCADILLOS_IDS = [
   'panceta','panceta-q','lomo','lomo-q','bacon','bacon-q','chorizo','chorizo-q',
   'panceta-m','panceta-qm','lomo-m','lomo-qm','bacon-m','bacon-qm','chorizo-m','chorizo-qm'
@@ -884,6 +887,8 @@ function entrar() {
     document.getElementById('main-app').style.height = 'calc(100vh - 116px)';
     renderProductos();
     crearComanda('Mesa 1');
+    pedirPermiso();
+    setInterval(pollingCamarero, 5000);
   } else {
     badge.textContent = '🔥 Plancha';
     badge.className = 'badge-rol badge-plancha';
@@ -1227,13 +1232,7 @@ async function marcarListo(id) {
       headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY },
       body: JSON.stringify(data)
     });
-    try {
-      await fetch(`${NTFY_BASE}-${comanda.camarero.toLowerCase()}`, {
-        method: 'POST',
-        headers: { 'Title': '🔔 Listo!', 'Priority': 'high', 'Tags': 'sandwich' },
-        body: comanda.items.map(i=>`${i.qty}× ${i.nombre}`).join(', ')
-      });
-    } catch(e) {}
+    // Notificación gestionada por polling en el cliente del camarero
     cargarPlancha();
   } catch(e) {}
 }
@@ -1286,8 +1285,10 @@ async function enviarAPlancha() {
     const j = await r.json();
     const data = j.record;
     data.comandas = data.comandas || [];
+    const nuevaId = Date.now();
+    registrarEnviada(nuevaId);
     data.comandas.unshift({
-      id: Date.now(), camarero: miNombre,
+      id: nuevaId, camarero: miNombre,
       items: bocatas.map(i => ({
         nombre: i.nombre + (i.id.endsWith('-m') || i.id.endsWith('-qm') ? ' (montado)' : ''),
         qty: i.qty
@@ -1310,6 +1311,94 @@ async function enviarAPlancha() {
 
 // ── UTILIDADES ────────────────────────────────────────────────
 function fmt(n) { return n.toFixed(2).replace('.', ',') + ' €'; }
+
+// ── NOTIFICACIONES NATIVAS ────────────────────────────────────
+async function pedirPermiso() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    await Notification.requestPermission();
+  }
+}
+
+function notificar(titulo, cuerpo) {
+  // Vibración
+  if (navigator.vibrate) navigator.vibrate([400, 100, 400, 100, 400]);
+
+  // Sonido con Web Audio API (sin fichero externo)
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.3, 0.6].forEach(t => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.6, ctx.currentTime + t);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.25);
+      osc.start(ctx.currentTime + t);
+      osc.stop(ctx.currentTime + t + 0.25);
+    });
+  } catch(e) {}
+
+  // Aviso en pantalla
+  mostrarAvisoPantalla(titulo, cuerpo);
+}
+
+function mostrarAvisoPantalla(titulo, cuerpo) {
+  // Eliminar aviso anterior si existe
+  const anterior = document.getElementById('aviso-listo');
+  if (anterior) anterior.remove();
+
+  const aviso = document.createElement('div');
+  aviso.id = 'aviso-listo';
+  aviso.innerHTML = `
+    <div style="font-size:2.5rem;margin-bottom:8px">🔔</div>
+    <div style="font-family:Oswald,sans-serif;font-size:1.4rem;letter-spacing:2px;color:#fff;margin-bottom:6px">${titulo}</div>
+    <div style="font-size:0.9rem;color:#ccc;margin-bottom:16px">${cuerpo}</div>
+    <button onclick="document.getElementById('aviso-listo').remove()"
+      style="background:var(--verde);border:none;border-radius:8px;padding:10px 24px;
+             font-family:Oswald,sans-serif;font-size:1rem;letter-spacing:2px;color:#fff;cursor:pointer">
+      OK
+    </button>`;
+  aviso.style.cssText = `
+    position:fixed;inset:0;z-index:9999;
+    background:rgba(0,0,0,0.92);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:2rem;
+    animation:fadeIn 0.2s ease;`;
+  document.body.appendChild(aviso);
+
+  // Auto-cerrar tras 8 segundos
+  setTimeout(() => { if (document.getElementById('aviso-listo')) aviso.remove(); }, 8000);
+}
+
+// ── POLLING CAMARERO (detectar comandas listas) ───────────────
+let comandasEnviadas = new Set(); // IDs que el camarero ha enviado
+let comandasYaNotificadas = new Set(); // IDs ya notificados
+
+function registrarEnviada(id) {
+  comandasEnviadas.add(id);
+}
+
+async function pollingCamarero() {
+  if (miRol !== 'camarero') return;
+  try {
+    const r = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`,
+      { headers: { 'X-Master-Key': JSONBIN_API_KEY } });
+    const j = await r.json();
+    const comandasRemota = j.record.comandas || [];
+    comandasRemota.forEach(c => {
+      if (
+        c.lista &&
+        c.camarero === miNombre &&
+        comandasEnviadas.has(c.id) &&
+        !comandasYaNotificadas.has(c.id)
+      ) {
+        comandasYaNotificadas.add(c.id);
+        notificar('🔔 ¡Listo!', c.items.map(i => `${i.qty}× ${i.nombre}`).join(', '));
+      }
+    });
+  } catch(e) {}
+}
 
 </script>
 </body>
