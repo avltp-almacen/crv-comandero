@@ -578,8 +578,34 @@
  }
  .modal-cambio-big { font-size: 16px; color: var(--verde-glow); margin-bottom: 16px; }
 
+ .modal-btn-sumup {
+ width: 100%; padding: 16px;
+ background: #00b8a9;
+ border: none; border-radius: 12px;
+ font-family: 'Oswald', sans-serif;
+ font-size: 19px; font-weight: 700; letter-spacing: 2px;
+ color: #fff; cursor: pointer; margin-bottom: 10px;
+ }
+ .modal-btn-sumup:active { transform: scale(.97); filter: brightness(.9); }
+
+ .modal-btn-efectivo {
+ width: 100%; padding: 16px;
+ background: var(--verde);
+ border: none; border-radius: 12px;
+ font-family: 'Oswald', sans-serif;
+ font-size: 19px; font-weight: 700; letter-spacing: 2px;
+ color: #fff; cursor: pointer; margin-bottom: 10px;
+ }
+ .modal-btn-efectivo:active { transform: scale(.97); filter: brightness(.9); }
+
+ .efectivo-paga-row {
+ display: flex; align-items: center; gap: 10px;
+ margin-bottom: 10px; justify-content: space-between;
+ }
+ .efectivo-paga-row span { font-size: 14px; color: var(--text-dim); }
+
  .modal-btn-nueva {
- width: 100%; padding: 12px;
+ width: 100%; padding: 14px;
  background: var(--verde);
  border: none; border-radius: 10px;
  font-family: 'Oswald', sans-serif;
@@ -760,32 +786,41 @@
  <span class="total-label">TOTAL</span>
  <span class="total-amount" id="totalAmount">0,00 €</span>
  </div>
- <div id="cambioRow" style="display:none"></div>
- <div class="teclado-rapido" id="tecladoRapido"></div>
- <div class="cobro-row">
- <span class="cobro-label">Paga con:</span>
- <input class="cobro-input" id="cobroInput" type="number" inputmode="decimal"
- step="0.5" min="0" placeholder="0,00" oninput="calcCambio()">
- </div>
  <div class="botones-accion">
- <button class="btn-cobrar" id="btnCobrar" onclick="abrirModalCobro()" disabled> COBRAR</button>
- <button class="btn-plancha" id="btnPlancha" onclick="enviarAPlancha()"> A PLANCHA</button>
+ <button class="btn-cobrar" id="btnCobrar" onclick="abrirModalMetodo()" disabled>COBRAR</button>
+ <button class="btn-plancha" id="btnPlancha" onclick="enviarAPlancha()">A PLANCHA</button>
  </div>
  </div>
 </div>
 
 </div><!-- fin app-principal -->
 
-<!-- MODAL COBRO -->
-<div class="modal-overlay hidden" id="modalCobro">
+<!-- MODAL ELEGIR MÉTODO -->
+<div class="modal-overlay hidden" id="modalMetodo">
  <div class="modal-box">
  <h2>COBRAR</h2>
- <div class="modal-resumen" id="modalResumen"></div>
- <div class="modal-total" id="modalTotal"></div>
- <div class="modal-cambio-big" id="modalCambio"></div>
- <button class="modal-btn-sumup" onclick="cobrarConSumup()">Cobrar con SumUp</button>
- <button class="modal-btn-nueva" onclick="cerrarYNueva()">+ NUEVA COMANDA</button>
- <button class="modal-btn-cerrar" onclick="cerrarModal()">Seguir editando</button>
+ <div class="modal-resumen" id="metodoResumen"></div>
+ <div class="modal-total" id="metodoTotal"></div>
+ <button class="modal-btn-sumup" onclick="elegirSumup()">TARJETA · SUMUP</button>
+ <button class="modal-btn-efectivo" onclick="elegirEfectivo()">EFECTIVO</button>
+ <button class="modal-btn-cerrar" onclick="cerrarMetodo()">Cancelar</button>
+ </div>
+</div>
+
+<!-- MODAL EFECTIVO (cambio) -->
+<div class="modal-overlay hidden" id="modalEfectivo">
+ <div class="modal-box">
+ <h2>EFECTIVO</h2>
+ <div class="modal-total" id="efectivoTotal"></div>
+ <div class="efectivo-paga-row">
+ <span>Paga con:</span>
+ <input class="cobro-input" id="efectivoInput" type="number" inputmode="decimal"
+ step="0.5" min="0" placeholder="0,00" oninput="calcCambioEfectivo()">
+ </div>
+ <div class="teclado-rapido" id="efectivoTeclado"></div>
+ <div id="efectivoCambioRow" style="display:none;margin-bottom:12px"></div>
+ <button class="modal-btn-nueva" onclick="confirmarEfectivo()">CONFIRMAR COBRO</button>
+ <button class="modal-btn-cerrar" onclick="volverAMetodo()">Atrás</button>
  </div>
 </div>
 
@@ -1025,7 +1060,7 @@ function addItem(prod, btn) {
  document.body.appendChild(anim);
  setTimeout(() => anim.remove(), 650);
  btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop');
- renderComanda(); actualizarBadges(); calcCambio();
+ renderComanda(); actualizarBadges();
 }
 
 function cambiarQty(itemId, delta) {
@@ -1033,7 +1068,7 @@ function cambiarQty(itemId, delta) {
  const ex = c.items.find(i => i.id === itemId); if (!ex) return;
  ex.qty += delta;
  if (ex.qty <= 0) c.items = c.items.filter(i => i.id !== itemId);
- renderComanda(); actualizarBadges(); calcCambio();
+ renderComanda(); actualizarBadges();
 }
 
 function vaciarComanda() {
@@ -1063,31 +1098,10 @@ function renderComanda() {
  const total = calcTotal(c);
  document.getElementById('totalAmount').textContent = fmt(total);
  document.getElementById('btnCobrar').disabled = false;
- renderTecladoRapido(total);
  renderTabs();
 }
 
-function renderTecladoRapido(total) {
- const wrap = document.getElementById('tecladoRapido');
- wrap.innerHTML = '';
- sugerirBilletes(total).forEach(v => {
- const btn = document.createElement('button');
- btn.textContent = v % 1 === 0 ? `${v}€` : `${v.toFixed(2)}€`;
- btn.onclick = () => { document.getElementById('cobroInput').value = v; calcCambio(); };
- wrap.appendChild(btn);
- });
-}
-
-function sugerirBilletes(total) {
- const billetes = [5,10,20,50], result = [];
- if (total === Math.round(total*2)/2) result.push(total);
- const r05 = Math.ceil(total*2)/2;
- if (r05 !== total) result.push(r05);
- const rE = Math.ceil(total);
- if (!result.includes(rE)) result.push(rE);
- billetes.forEach(b => { if (b > total && !result.includes(b)) result.push(b); });
- return result.slice(0,5);
-}
+function calcTotal(c) { return c ? c.items.reduce((s,i) => s + i.precio*i.qty, 0) : 0; }
 
 function actualizarBadges() {
  document.querySelectorAll('.prod-btn .badge').forEach(b => b.remove());
@@ -1100,60 +1114,27 @@ function actualizarBadges() {
  });
 }
 
-// ── CÁLCULO ───────────────────────────────────────────────────
-function calcTotal(c) { return c ? c.items.reduce((s,i) => s + i.precio*i.qty, 0) : 0; }
-
-function calcCambio() {
- const total = calcTotal(getComanda());
- const paga = parseFloat(document.getElementById('cobroInput').value) || 0;
- const row = document.getElementById('cambioRow');
- if (!paga) { row.style.display = 'none'; return; }
- const cambio = paga - total;
- row.style.display = 'flex';
- if (cambio >= 0) {
- row.className = 'cambio-row';
- row.innerHTML = `<span class="cambio-label">CAMBIO</span><span class="cambio-amount">${fmt(cambio)}</span>`;
- } else {
- row.className = 'cambio-row falta';
- row.innerHTML = `<span class="cambio-label">FALTAN</span><span class="cambio-amount">${fmt(Math.abs(cambio))}</span>`;
- }
-}
-
-function resetCobro() {
- document.getElementById('cobroInput').value = '';
- document.getElementById('cambioRow').style.display = 'none';
- document.getElementById('tecladoRapido').innerHTML = '';
-}
-
-// ── COBRO ─────────────────────────────────────────────────────
-function abrirModalCobro() {
- const c = getComanda(); if (!c || !c.items.length) return;
- const total = calcTotal(c);
- const paga = parseFloat(document.getElementById('cobroInput').value) || 0;
- const cambio = paga > 0 ? paga - total : null;
- document.getElementById('modalResumen').textContent = c.items.map(i=>`${i.qty}× ${i.nombre}`).join(', ');
- document.getElementById('modalTotal').textContent = fmt(total);
- if (cambio !== null && cambio >= 0) {
- document.getElementById('modalCambio').textContent = `Cambio: ${fmt(cambio)}`;
- document.getElementById('modalCambio').style.color = 'var(--verde-glow)';
- } else if (cambio !== null) {
- document.getElementById('modalCambio').textContent = `Faltan: ${fmt(Math.abs(cambio))}`;
- document.getElementById('modalCambio').style.color = 'var(--rojo)';
- } else {
- document.getElementById('modalCambio').textContent = '';
- }
- historial.unshift({ ts: new Date(), nombre: c.nombre, items: [...c.items], total, paga, cambio });
- document.getElementById('modalCobro').classList.remove('hidden');
-}
-
-function cerrarModal() { document.getElementById('modalCobro').classList.add('hidden'); }
-
+// ── COBRO: PASO 1 — ELEGIR MÉTODO ─────────────────────────────
 const SUMUP_AFFILIATE_KEY = 'sup_afk_cTUj6qHFVz6DQhcRbnC2lGA7ejOh1yol';
 const SUMUP_APP_ID = 'https://avltp-almacen.github.io/crv-comandero/';
 
-function cobrarConSumup() {
+function abrirModalMetodo() {
+  const c = getComanda(); if (!c || !c.items.length) return;
+  const total = calcTotal(c);
+  document.getElementById('metodoResumen').textContent = c.items.map(i=>`${i.qty}× ${i.nombre}`).join(', ');
+  document.getElementById('metodoTotal').textContent = fmt(total);
+  document.getElementById('modalMetodo').classList.remove('hidden');
+}
+
+function cerrarMetodo() { document.getElementById('modalMetodo').classList.add('hidden'); }
+
+function elegirSumup() {
   const c = getComanda(); if (!c) return;
   const total = calcTotal(c);
+  // Registrar en historial
+  historial.unshift({ ts: new Date(), nombre: c.nombre, items: [...c.items], total, metodo: 'SumUp', paga: null, cambio: null });
+  document.getElementById('modalMetodo').classList.add('hidden');
+  // Abrir SumUp
   const url = `sumupmerchant://pay/1.0`
     + `?affiliate-key=${SUMUP_AFFILIATE_KEY}`
     + `&app-id=${encodeURIComponent(SUMUP_APP_ID)}`
@@ -1162,16 +1143,85 @@ function cobrarConSumup() {
     + `&title=${encodeURIComponent(c.nombre)}`
     + `&callback=${encodeURIComponent(SUMUP_APP_ID)}`;
   window.location.href = url;
+  // Tras volver de SumUp, limpiar comanda
+  vaciarTrasCobro();
 }
 
-function cerrarYNueva() {
- document.getElementById('modalCobro').classList.add('hidden');
- const c = getComanda();
- if (c) {
- c.items = []; c.nombre = sugerirNombre();
- renderComanda(); actualizarBadges(); resetCobro(); renderTabs();
- } else { crearComanda(sugerirNombre()); }
+// ── COBRO: PASO 2 — EFECTIVO ──────────────────────────────────
+function elegirEfectivo() {
+  const c = getComanda(); if (!c) return;
+  const total = calcTotal(c);
+  document.getElementById('modalMetodo').classList.add('hidden');
+  document.getElementById('efectivoTotal').textContent = fmt(total);
+  document.getElementById('efectivoInput').value = '';
+  document.getElementById('efectivoCambioRow').style.display = 'none';
+  renderTecladoEfectivo(total);
+  document.getElementById('modalEfectivo').classList.remove('hidden');
+  setTimeout(() => document.getElementById('efectivoInput').focus(), 100);
 }
+
+function volverAMetodo() {
+  document.getElementById('modalEfectivo').classList.add('hidden');
+  document.getElementById('modalMetodo').classList.remove('hidden');
+}
+
+function renderTecladoEfectivo(total) {
+  const wrap = document.getElementById('efectivoTeclado');
+  wrap.innerHTML = '';
+  sugerirBilletes(total).forEach(v => {
+    const btn = document.createElement('button');
+    btn.textContent = v % 1 === 0 ? `${v}€` : `${v.toFixed(2)}€`;
+    btn.onclick = () => { document.getElementById('efectivoInput').value = v; calcCambioEfectivo(); };
+    wrap.appendChild(btn);
+  });
+}
+
+function sugerirBilletes(total) {
+  const billetes = [5,10,20,50], result = [];
+  if (total === Math.round(total*2)/2) result.push(total);
+  const r05 = Math.ceil(total*2)/2;
+  if (r05 !== total) result.push(r05);
+  const rE = Math.ceil(total);
+  if (!result.includes(rE)) result.push(rE);
+  billetes.forEach(b => { if (b > total && !result.includes(b)) result.push(b); });
+  return result.slice(0,5);
+}
+
+function calcCambioEfectivo() {
+  const total = calcTotal(getComanda());
+  const paga = parseFloat(document.getElementById('efectivoInput').value) || 0;
+  const row = document.getElementById('efectivoCambioRow');
+  if (!paga) { row.style.display = 'none'; return; }
+  const cambio = paga - total;
+  row.style.display = 'flex';
+  if (cambio >= 0) {
+    row.className = 'cambio-row';
+    row.innerHTML = `<span class="cambio-label">CAMBIO</span><span class="cambio-amount">${fmt(cambio)}</span>`;
+  } else {
+    row.className = 'cambio-row falta';
+    row.innerHTML = `<span class="cambio-label">FALTAN</span><span class="cambio-amount">${fmt(Math.abs(cambio))}</span>`;
+  }
+}
+
+function confirmarEfectivo() {
+  const c = getComanda(); if (!c) return;
+  const total = calcTotal(c);
+  const paga = parseFloat(document.getElementById('efectivoInput').value) || null;
+  const cambio = paga !== null ? paga - total : null;
+  historial.unshift({ ts: new Date(), nombre: c.nombre, items: [...c.items], total, metodo: 'Efectivo', paga, cambio });
+  document.getElementById('modalEfectivo').classList.add('hidden');
+  vaciarTrasCobro();
+}
+
+function vaciarTrasCobro() {
+  const c = getComanda();
+  if (c) {
+    c.items = []; c.nombre = sugerirNombre();
+    renderComanda(); actualizarBadges(); renderTabs();
+  } else { crearComanda(sugerirNombre()); }
+}
+
+function resetCobro() { /* ya no hay cobro en footer */ }
 
 // ── HISTORIAL ─────────────────────────────────────────────────
 function toggleHistorial() {
