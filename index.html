@@ -898,7 +898,29 @@ const CATALOGO = [
 // ── ESTADO ────────────────────────────────────────────────────
 let miNombre = '';
 let miRol = null;
-let comandas = [], activeIdx = -1, historial = [], nextId = 1;
+let comandas = [], activeIdx = -1, nextId = 1;
+let historial = cargarHistorial();
+
+function cargarHistorial() {
+  try {
+    const raw = localStorage.getItem('crv-historial');
+    if (!raw) return [];
+    return JSON.parse(raw).map(h => ({ ...h, ts: new Date(h.ts) }));
+  } catch(e) { return []; }
+}
+
+function guardarHistorial() {
+  try {
+    localStorage.setItem('crv-historial', JSON.stringify(historial));
+  } catch(e) {}
+}
+
+function borrarHistorial() {
+  if (!confirm('¿Borrar todo el historial de cobros? Esto no se puede deshacer.')) return;
+  historial = [];
+  guardarHistorial();
+  toggleHistorial(); toggleHistorial(); // refrescar
+}
 function getComanda() { return comandas[activeIdx] || null; }
 
 // ── INICIO ────────────────────────────────────────────────────
@@ -1133,6 +1155,7 @@ function elegirSumup() {
   const total = calcTotal(c);
   // Registrar en historial
   historial.unshift({ ts: new Date(), nombre: c.nombre, items: [...c.items], total, metodo: 'SumUp', paga: null, cambio: null });
+  guardarHistorial();
   document.getElementById('modalMetodo').classList.add('hidden');
   // Abrir SumUp
   const url = `sumupmerchant://pay/1.0`
@@ -1209,6 +1232,7 @@ function confirmarEfectivo() {
   const paga = parseFloat(document.getElementById('efectivoInput').value) || null;
   const cambio = paga !== null ? paga - total : null;
   historial.unshift({ ts: new Date(), nombre: c.nombre, items: [...c.items], total, metodo: 'Efectivo', paga, cambio });
+  guardarHistorial();
   document.getElementById('modalEfectivo').classList.add('hidden');
   vaciarTrasCobro();
 }
@@ -1228,20 +1252,47 @@ function toggleHistorial() {
  const modal = document.getElementById('modalHistorial');
  if (!modal.classList.contains('hidden')) { modal.classList.add('hidden'); return; }
  const cont = document.getElementById('historialContent');
- cont.innerHTML = historial.length === 0
- ? '<p style="color:var(--text-dim);text-align:center;font-size:13px;padding:12px">Sin comandas cobradas aún</p>'
- : historial.map(h => `
+
+ if (historial.length === 0) {
+   cont.innerHTML = '<p style="color:var(--text-dim);text-align:center;font-size:13px;padding:12px">Sin comandas cobradas aún</p>';
+   modal.classList.remove('hidden');
+   return;
+ }
+
+ // Totales de caja
+ const totalCaja = historial.reduce((s,h) => s + h.total, 0);
+ const totalEfectivo = historial.filter(h => h.metodo === 'Efectivo').reduce((s,h) => s + h.total, 0);
+ const totalTarjeta = historial.filter(h => h.metodo === 'SumUp').reduce((s,h) => s + h.total, 0);
+
+ const resumen = `
+   <div style="background:rgba(46,204,113,.1);border:1px solid var(--verde);border-radius:10px;padding:12px;margin-bottom:12px">
+     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+       <span style="font-family:Oswald,sans-serif;font-size:13px;letter-spacing:2px;color:var(--text-dim)">CAJA TOTAL</span>
+       <span style="font-family:Oswald,sans-serif;font-size:22px;font-weight:700;color:var(--verde-glow)">${fmt(totalCaja)}</span>
+     </div>
+     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim)">
+       <span>Efectivo: <b style="color:#fff">${fmt(totalEfectivo)}</b></span>
+       <span>Tarjeta: <b style="color:#fff">${fmt(totalTarjeta)}</b></span>
+       <span>${historial.length} cobros</span>
+     </div>
+   </div>`;
+
+ const lista = historial.map(h => `
  <div style="background:var(--card3);border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #222">
  <div style="display:flex;justify-content:space-between;margin-bottom:4px">
  <span style="font-weight:800;font-size:13px">${h.nombre}</span>
- <span style="font-size:11px;color:var(--text-dim)">${h.ts.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</span>
+ <span style="font-size:11px;color:var(--text-dim)">${h.metodo || ''} · ${h.ts.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</span>
  </div>
  <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">${h.items.map(i=>`${i.qty}×${i.nombre}`).join(', ')}</div>
  <div style="display:flex;justify-content:space-between">
  <span style="font-weight:800;color:var(--verde-glow);font-family:Oswald,sans-serif">${fmt(h.total)}</span>
- ${h.cambio !== null ? `<span style="font-size:12px;color:var(--verde-glow)">Cambio: ${fmt(Math.max(0,h.cambio))}</span>` : ''}
+ ${h.cambio !== null && h.cambio !== undefined ? `<span style="font-size:12px;color:var(--verde-glow)">Cambio: ${fmt(Math.max(0,h.cambio))}</span>` : ''}
  </div>
  </div>`).join('');
+
+ const btnBorrar = `<button onclick="borrarHistorial()" style="width:100%;padding:10px;background:transparent;border:1px solid var(--rojo);border-radius:8px;color:var(--rojo);font-size:13px;cursor:pointer;margin-top:4px">Borrar historial</button>`;
+
+ cont.innerHTML = resumen + lista + btnBorrar;
  modal.classList.remove('hidden');
 }
 
