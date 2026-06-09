@@ -841,6 +841,7 @@
  <input id="inputEditarNombre" type="text" maxlength="20"
  onkeydown="if(event.key==='Enter') guardarNombre()">
  <button class="btn-guardar" onclick="guardarNombre()">GUARDAR</button>
+ <button onclick="cerrarSesion()" style="width:100%;padding:10px;background:transparent;border:1px solid #444;border-radius:8px;color:var(--text-dim);font-size:13px;cursor:pointer;margin-top:10px">Salir / cambiar rol</button>
  </div>
 </div>
 
@@ -938,6 +939,14 @@ function actualizarBtnEntrar() {
 
 function entrar() {
  miNombre = document.getElementById('input-nombre-inicio').value.trim();
+ // Guardar sesión para sobrevivir a recargas (ej: volver de SumUp)
+ try {
+   localStorage.setItem('crv-sesion', JSON.stringify({ nombre: miNombre, rol: miRol }));
+ } catch(e) {}
+ arrancarApp();
+}
+
+function arrancarApp() {
  document.getElementById('pantalla-inicio').classList.add('hidden');
  document.getElementById('app-principal').classList.remove('hidden');
 
@@ -981,8 +990,19 @@ function guardarNombre() {
  if (nuevo) {
  miNombre = nuevo;
  document.getElementById('nombre-display').textContent = miNombre;
+ try {
+   const s = JSON.parse(localStorage.getItem('crv-sesion') || '{}');
+   s.nombre = miNombre;
+   localStorage.setItem('crv-sesion', JSON.stringify(s));
+ } catch(e) {}
  }
  document.getElementById('modalEditarNombre').classList.add('hidden');
+}
+
+function cerrarSesion() {
+  if (!confirm('¿Salir y volver a elegir nombre y rol?')) return;
+  try { localStorage.removeItem('crv-sesion'); } catch(e) {}
+  location.reload();
 }
 
 // ── PRODUCTOS ─────────────────────────────────────────────────
@@ -1157,11 +1177,13 @@ function elegirSumup() {
   historial.unshift({ ts: new Date(), nombre: c.nombre, items: [...c.items], total, metodo: 'SumUp', paga: null, cambio: null });
   guardarHistorial();
   document.getElementById('modalMetodo').classList.add('hidden');
-  // Abrir SumUp
+  // Abrir SumUp (total para v1.88+, amount para versiones antiguas)
+  const importe = total.toFixed(2);
   const url = `sumupmerchant://pay/1.0`
     + `?affiliate-key=${SUMUP_AFFILIATE_KEY}`
     + `&app-id=${encodeURIComponent(SUMUP_APP_ID)}`
-    + `&total=${total.toFixed(2)}`
+    + `&total=${importe}`
+    + `&amount=${importe}`
     + `&currency=EUR`
     + `&title=${encodeURIComponent(c.nombre)}`
     + `&callback=${encodeURIComponent(SUMUP_APP_ID)}`;
@@ -1630,6 +1652,18 @@ async function pollingCamarero() {
  });
  } catch(e) {}
 }
+
+// ── RESTAURAR SESIÓN AL CARGAR (ej: volver de SumUp) ──────────
+(function restaurarSesion() {
+  try {
+    const s = JSON.parse(localStorage.getItem('crv-sesion') || 'null');
+    if (s && s.nombre && s.rol) {
+      miNombre = s.nombre;
+      miRol = s.rol;
+      arrancarApp();
+    }
+  } catch(e) {}
+})();
 
 </script>
 </body>
