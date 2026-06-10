@@ -940,6 +940,25 @@ function guardarHistorial() {
   } catch(e) {}
 }
 
+function guardarComandas() {
+  try {
+    localStorage.setItem('crv-comandas', JSON.stringify({ comandas, activeIdx, nextId }));
+  } catch(e) {}
+}
+
+function cargarComandas() {
+  try {
+    const raw = localStorage.getItem('crv-comandas');
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data.comandas || !data.comandas.length) return false;
+    comandas = data.comandas;
+    activeIdx = data.activeIdx >= 0 ? data.activeIdx : 0;
+    nextId = data.nextId || comandas.length + 1;
+    return true;
+  } catch(e) { return false; }
+}
+
 function borrarHistorial() {
   if (!confirm('¿Borrar todo el historial de cobros? Esto no se puede deshacer.')) return;
   historial = [];
@@ -988,7 +1007,11 @@ function arrancarApp() {
  // Ajustar altura del main
  document.getElementById('main-app').style.height = 'calc(100vh - 116px)';
  renderProductos();
- crearComanda('Mesa 1');
+ if (cargarComandas()) {
+   renderTabs(); renderComanda(); actualizarBadges();
+ } else {
+   crearComanda('Mesa 1');
+ }
  pedirPermiso();
  // Inicializar con las ya listas para no notificar las antiguas
  inicializarPolling().then(() => setInterval(pollingCamarero, 5000));
@@ -1107,7 +1130,7 @@ function renderTabs() {
  const t = document.createElement('div');
  t.className = 'tab' + (i === activeIdx ? ' active' : '');
  const total = calcTotal(c);
- t.innerHTML = `<div><div>${c.nombre}</div>${total > 0 ? `<span class="tab-total">${fmt(total)}</span>` : ''}</div><span class="close-tab" onclick="cerrarTab(${i},event)"></span>`;
+ t.innerHTML = `<div><div>${c.nombre}</div>${total > 0 ? `<span class="tab-total">${fmt(total)}</span>` : ''}</div><span class="close-tab" onclick="cerrarTab(${i},event)">✕</span>`;
  t.onclick = () => activarTab(i);
  wrap.insertBefore(t, btnNew);
  });
@@ -1154,7 +1177,7 @@ function renderComanda() {
  panel.innerHTML = '<div class="comanda-vacia">Sin productos aún…</div>';
  document.getElementById('totalAmount').textContent = '0,00 €';
  document.getElementById('btnCobrar').disabled = true;
- renderTabs(); return;
+ renderTabs(); guardarComandas(); return;
  }
  panel.innerHTML = '';
  c.items.forEach(item => {
@@ -1167,6 +1190,7 @@ function renderComanda() {
  document.getElementById('totalAmount').textContent = fmt(total);
  document.getElementById('btnCobrar').disabled = false;
  renderTabs();
+ guardarComandas();
 }
 
 function calcTotal(c) { return c ? c.items.reduce((s,i) => s + i.precio*i.qty, 0) : 0; }
