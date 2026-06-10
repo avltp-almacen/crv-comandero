@@ -321,16 +321,15 @@
  border-color: var(--verde-glow);
  box-shadow: 0 0 10px rgba(46,204,113,.3);
  }
- .prod-btn .emoji { font-size: 20px; line-height: 1; }
  .prod-btn .nombre {
- font-size: 10px;
+ font-size: 12px;
  font-weight: 700;
  text-align: center;
  color: var(--text);
- line-height: 1.15;
+ line-height: 1.2;
  }
  .prod-btn .precio {
- font-size: 11px;
+ font-size: 14px;
  font-weight: 900;
  color: var(--verde-glow);
  font-family: 'Oswald', sans-serif;
@@ -889,34 +888,39 @@ const BOCADILLOS_IDS = [
 ];
 
 const CATALOGO = [
- { cat: " Bebidas", items: [
- { id:"copa", nombre:"Copa", precio:3.00, emoji:"" },
- { id:"mini-copa", nombre:"Mini copa", precio:2.00, emoji:"" },
- { id:"mini-cerv", nombre:"Mini cerveza", precio:1.50, emoji:"" },
- { id:"cerveza", nombre:"Cerveza", precio:2.50, emoji:"" },
- { id:"sangria", nombre:"Sangría", precio:2.50, emoji:"" },
- { id:"refresco", nombre:"Refresco", precio:1.50, emoji:"" },
- { id:"agua", nombre:"Agua", precio:1.00, emoji:"" },
+ { cat: "Bebidas", items: [
+ { id:"refresco", nombre:"Refresco", precio:2.00 },
+ { id:"agua", nombre:"Agua", precio:1.00 },
+ { id:"mini-cerv", nombre:"Mini cerveza", precio:5.50 },
+ { id:"doble-cerv", nombre:"Doble cerveza", precio:3.00 },
+ { id:"mini-copa", nombre:"Mini copa", precio:10.00 },
+ { id:"copa", nombre:"Copa", precio:6.00 },
+ { id:"chupito", nombre:"Chupito", precio:1.50 },
+ { id:"kalimotxo", nombre:"Kalimotxo", precio:3.00 },
+ { id:"tinto-verano", nombre:"Tinto de verano", precio:3.00 },
+ { id:"sangria", nombre:"Sangría", precio:0 },
+ { id:"mini-28030", nombre:"Mini 28030", precio:8.00 },
+ { id:"doble-28030", nombre:"Doble 28030", precio:5.50 },
  ]},
- { cat: " Bocadillos", items: [
- { id:"panceta", nombre:"Panceta", precio:3.00, emoji:"" },
- { id:"panceta-q", nombre:"Panceta queso", precio:3.50, emoji:"" },
- { id:"lomo", nombre:"Lomo", precio:3.00, emoji:"" },
- { id:"lomo-q", nombre:"Lomo queso", precio:3.50, emoji:"" },
- { id:"bacon", nombre:"Bacon", precio:3.00, emoji:"" },
- { id:"bacon-q", nombre:"Bacon queso", precio:3.50, emoji:"" },
- { id:"chorizo", nombre:"Chorizo", precio:3.00, emoji:"" },
- { id:"chorizo-q", nombre:"Chorizo queso", precio:3.50, emoji:"" },
+ { cat: "Bocadillos", items: [
+ { id:"panceta", nombre:"Panceta", precio:5.00 },
+ { id:"panceta-q", nombre:"Panceta queso", precio:5.50 },
+ { id:"lomo", nombre:"Lomo", precio:5.00 },
+ { id:"lomo-q", nombre:"Lomo queso", precio:5.50 },
+ { id:"bacon", nombre:"Bacon", precio:5.00 },
+ { id:"bacon-q", nombre:"Bacon queso", precio:5.50 },
+ { id:"chorizo", nombre:"Chorizo", precio:5.00 },
+ { id:"chorizo-q", nombre:"Chorizo queso", precio:5.50 },
  ]},
- { cat: " Montados", items: [
- { id:"panceta-m", nombre:"Panceta", precio:2.00, emoji:"" },
- { id:"panceta-qm", nombre:"Panceta queso", precio:2.50, emoji:"" },
- { id:"lomo-m", nombre:"Lomo", precio:2.00, emoji:"" },
- { id:"lomo-qm", nombre:"Lomo queso", precio:2.50, emoji:"" },
- { id:"bacon-m", nombre:"Bacon", precio:2.00, emoji:"" },
- { id:"bacon-qm", nombre:"Bacon queso", precio:2.50, emoji:"" },
- { id:"chorizo-m", nombre:"Chorizo", precio:2.00, emoji:"" },
- { id:"chorizo-qm", nombre:"Chorizo queso", precio:2.50, emoji:"" },
+ { cat: "Montados", items: [
+ { id:"panceta-m", nombre:"Panceta", precio:3.00 },
+ { id:"panceta-qm", nombre:"Panceta queso", precio:3.50 },
+ { id:"lomo-m", nombre:"Lomo", precio:3.00 },
+ { id:"lomo-qm", nombre:"Lomo queso", precio:3.50 },
+ { id:"bacon-m", nombre:"Bacon", precio:3.00 },
+ { id:"bacon-qm", nombre:"Bacon queso", precio:3.50 },
+ { id:"chorizo-m", nombre:"Chorizo", precio:3.00 },
+ { id:"chorizo-qm", nombre:"Chorizo queso", precio:3.50 },
  ]},
 ];
 
@@ -1070,7 +1074,7 @@ function renderProductos() {
  const btn = document.createElement('button');
  btn.className = 'prod-btn';
  btn.id = 'pbtn-' + p.id;
- btn.innerHTML = `<span class="emoji">${p.emoji}</span><span class="nombre">${p.nombre}</span><span class="precio">${fmt(p.precio)}</span>`;
+ btn.innerHTML = `<span class="nombre">${p.nombre}</span><span class="precio">${p.precio > 0 ? fmt(p.precio) : '—'}</span>`;
  btn.onclick = () => addItem(p, btn);
  grid.appendChild(btn);
  });
@@ -1146,7 +1150,10 @@ function addItem(prod, btn) {
  const rect = btn.getBoundingClientRect();
  const anim = document.createElement('div');
  anim.className = 'animacion';
- anim.textContent = prod.emoji;
+ anim.textContent = '+1';
+ anim.style.color = 'var(--verde-glow)';
+ anim.style.fontWeight = '900';
+ anim.style.fontFamily = 'Oswald, sans-serif';
  anim.style.left = rect.left + rect.width/2 - 16 + 'px';
  anim.style.top = rect.top + 'px';
  document.body.appendChild(anim);
@@ -1184,7 +1191,7 @@ function renderComanda() {
  c.items.forEach(item => {
  const div = document.createElement('div');
  div.className = 'linea-item';
- div.innerHTML = `<span style="font-size:15px">${item.emoji}</span><span class="li-nombre">${item.nombre}</span><div class="li-qty-wrap"><button class="li-qty-btn minus" onclick="cambiarQty('${item.id}',-1)">−</button><span class="li-qty">${item.qty}</span><button class="li-qty-btn" onclick="cambiarQty('${item.id}',1)">+</button></div><span class="li-subtotal">${fmt(item.precio*item.qty)}</span>`;
+ div.innerHTML = `<span class="li-nombre">${item.nombre}</span><div class="li-qty-wrap"><button class="li-qty-btn minus" onclick="cambiarQty('${item.id}',-1)">−</button><span class="li-qty">${item.qty}</span><button class="li-qty-btn" onclick="cambiarQty('${item.id}',1)">+</button></div><span class="li-subtotal">${fmt(item.precio*item.qty)}</span>`;
  panel.appendChild(div);
  });
  const total = calcTotal(c);
