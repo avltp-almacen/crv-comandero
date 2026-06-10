@@ -801,9 +801,21 @@
  <h2>COBRAR</h2>
  <div class="modal-resumen" id="metodoResumen"></div>
  <div class="modal-total" id="metodoTotal"></div>
- <button class="modal-btn-sumup" onclick="elegirSumup()">TARJETA · SUMUP</button>
+ <button class="modal-btn-sumup" onclick="elegirTarjeta()">TARJETA</button>
  <button class="modal-btn-efectivo" onclick="elegirEfectivo()">EFECTIVO</button>
  <button class="modal-btn-cerrar" onclick="cerrarMetodo()">Cancelar</button>
+ </div>
+</div>
+
+<!-- MODAL TARJETA (precio grande para TPV banco) -->
+<div class="modal-overlay hidden" id="modalTarjeta">
+ <div class="modal-box">
+ <h2>COBRO CON TARJETA</h2>
+ <p style="color:var(--text-dim);font-size:13px;margin-bottom:4px">Indica este importe al TPV:</p>
+ <div id="tarjetaTotal" style="font-family:'Oswald',sans-serif;font-size:60px;font-weight:700;color:var(--verde-glow);line-height:1.1;margin-bottom:8px"></div>
+ <div class="modal-resumen" id="tarjetaResumen" style="margin-bottom:20px"></div>
+ <button class="modal-btn-nueva" onclick="confirmarTarjeta()">COBRADO · NUEVA COMANDA</button>
+ <button class="modal-btn-cerrar" onclick="volverAMetodoDesdeTarjeta()">Atrás</button>
  </div>
 </div>
 
@@ -1170,25 +1182,26 @@ function abrirModalMetodo() {
 
 function cerrarMetodo() { document.getElementById('modalMetodo').classList.add('hidden'); }
 
-function elegirSumup() {
+function elegirTarjeta() {
   const c = getComanda(); if (!c) return;
   const total = calcTotal(c);
-  // Registrar en historial
-  historial.unshift({ ts: new Date(), nombre: c.nombre, items: [...c.items], total, metodo: 'SumUp', paga: null, cambio: null });
-  guardarHistorial();
   document.getElementById('modalMetodo').classList.add('hidden');
-  // Abrir SumUp (total para v1.88+, amount para versiones antiguas)
-  const importe = total.toFixed(2);
-  const url = `sumupmerchant://pay/1.0`
-    + `?affiliate-key=${SUMUP_AFFILIATE_KEY}`
-    + `&app-id=${encodeURIComponent(SUMUP_APP_ID)}`
-    + `&total=${importe}`
-    + `&amount=${importe}`
-    + `&currency=EUR`
-    + `&title=${encodeURIComponent(c.nombre)}`
-    + `&callback=${encodeURIComponent(SUMUP_APP_ID)}`;
-  window.location.href = url;
-  // Tras volver de SumUp, limpiar comanda
+  document.getElementById('tarjetaTotal').textContent = fmt(total);
+  document.getElementById('tarjetaResumen').textContent = c.items.map(i=>`${i.qty}× ${i.nombre}`).join(', ');
+  document.getElementById('modalTarjeta').classList.remove('hidden');
+}
+
+function volverAMetodoDesdeTarjeta() {
+  document.getElementById('modalTarjeta').classList.add('hidden');
+  document.getElementById('modalMetodo').classList.remove('hidden');
+}
+
+function confirmarTarjeta() {
+  const c = getComanda(); if (!c) return;
+  const total = calcTotal(c);
+  historial.unshift({ ts: new Date(), nombre: c.nombre, items: [...c.items], total, metodo: 'Tarjeta', paga: null, cambio: null });
+  guardarHistorial();
+  document.getElementById('modalTarjeta').classList.add('hidden');
   vaciarTrasCobro();
 }
 
