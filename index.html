@@ -195,6 +195,50 @@
  }
  .btn-historial:active { background: rgba(255,255,255,.25); }
 
+ .admin-tab {
+ flex: 1;
+ background: var(--card);
+ border: 1px solid var(--card2);
+ border-radius: 8px;
+ color: var(--text-dim);
+ font-family: 'Oswald', sans-serif;
+ font-size: 12px;
+ font-weight: 600;
+ letter-spacing: 1px;
+ padding: 10px 4px;
+ cursor: pointer;
+ }
+ .admin-tab.activo {
+ background: rgba(46,204,113,.12);
+ border-color: var(--verde-glow);
+ color: var(--verde-glow);
+ }
+ .admin-prod-row {
+ display: flex;
+ align-items: center;
+ gap: 8px;
+ background: var(--card);
+ border: 1px solid var(--card2);
+ border-radius: 8px;
+ padding: 8px 10px;
+ margin-bottom: 6px;
+ }
+ .admin-prod-row .nom { flex: 1; font-size: 13px; font-weight: 700; }
+ .admin-prod-row input {
+ width: 70px;
+ background: var(--card2);
+ border: 1px solid #333;
+ border-radius: 6px;
+ color: var(--verde-glow);
+ font-family: 'Oswald', sans-serif;
+ font-size: 15px;
+ font-weight: 700;
+ padding: 5px 8px;
+ text-align: right;
+ outline: none;
+ }
+ .admin-prod-row input:focus { border-color: var(--verde-glow); }
+
  /* ── TABS ── */
  .tabs-wrap {
  background: var(--card3);
@@ -745,9 +789,10 @@
  <div class="inicio-campo">
  <label>¿Cuál es tu rol?</label>
  <div class="roles-grid">
- <button class="rol-btn" id="rol-camarero" onclick="seleccionarRol('camarero')"> CAMARERO</button>
- <button class="rol-btn" id="rol-plancha" onclick="seleccionarRol('plancha')"> PLANCHA</button>
+ <button class="rol-btn" id="rol-camarero" onclick="seleccionarRol('camarero')">CAMARERO</button>
+ <button class="rol-btn" id="rol-plancha" onclick="seleccionarRol('plancha')">PLANCHA</button>
  </div>
+ <button class="rol-btn" id="rol-admin" onclick="seleccionarRol('admin')" style="width:100%;margin-top:8px">ADMINISTRADOR</button>
  </div>
 
  <button class="btn-entrar" id="btn-entrar" disabled onclick="entrar()">ENTRAR</button>
@@ -802,6 +847,16 @@
  <button class="btn-plancha" id="btnPlancha" onclick="enviarAPlancha()">A PLANCHA</button>
  </div>
  </div>
+</div>
+
+<!-- ── PANEL ADMINISTRADOR ── -->
+<div id="adminPanel" class="hidden" style="padding:12px;overflow-y:auto;height:calc(100vh - 72px)">
+ <div style="display:flex;gap:6px;margin-bottom:14px">
+  <button class="admin-tab activo" id="atab-caja" onclick="adminVista('caja')">CAJA TOTAL</button>
+  <button class="admin-tab" id="atab-productos" onclick="adminVista('productos')">PRODUCTOS</button>
+  <button class="admin-tab" id="atab-comandas" onclick="adminVista('comandas')">COMANDAS</button>
+ </div>
+ <div id="adminContenido"></div>
 </div>
 
 </div><!-- fin app-principal -->
@@ -894,12 +949,30 @@
 // ── CONFIGURACIÓN ─────────────────────────────────────────────
 const JSONBIN_BIN_ID = '6a25e197f5f4af5e29c814d5';
 const JSONBIN_API_KEY = '$2a$10$alWyaTYtElv0d6TVz6iP/eRK88JejoefJOzBOeVNTTE0fkBGN5gTS';
-const BOCADILLOS_IDS = [
+const JSONBIN_CONFIG_ID = '6a2af533f5f4af5e29e0eb70';
+const ADMIN_PASSWORD = 'crv2026';
+
+// Lee el bin de configuración (catálogo + caja global)
+async function leerConfig() {
+  const r = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG_ID}/latest`,
+    { headers: { 'X-Master-Key': JSONBIN_API_KEY } });
+  const j = await r.json();
+  return j.record;
+}
+
+async function escribirConfig(data) {
+  await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_CONFIG_ID}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY },
+    body: JSON.stringify(data)
+  });
+}
+let BOCADILLOS_IDS = [
  'panceta','panceta-q','lomo','lomo-q','bacon','bacon-q','chorizo','chorizo-q',
  'panceta-m','panceta-qm','lomo-m','lomo-qm','bacon-m','bacon-qm','chorizo-m','chorizo-qm'
 ];
 
-const CATALOGO = [
+const CATALOGO_DEFECTO = [
  { cat: "Bebidas", items: [
  { id:"refresco", nombre:"Refresco", precio:2.00 },
  { id:"agua", nombre:"Agua", precio:1.00 },
@@ -935,6 +1008,29 @@ const CATALOGO = [
  { id:"chorizo-qm", nombre:"Chorizo queso", precio:3.50 },
  ]},
 ];
+
+let CATALOGO = JSON.parse(JSON.stringify(CATALOGO_DEFECTO));
+
+// Recalcula qué IDs van a la plancha: todo lo de categorías Bocadillos y Montados
+function recalcularBocadillosIds() {
+  BOCADILLOS_IDS = [];
+  CATALOGO.forEach(cat => {
+    if (/bocadi|montad/i.test(cat.cat)) {
+      cat.items.forEach(i => BOCADILLOS_IDS.push(i.id));
+    }
+  });
+}
+
+// Carga el catálogo desde el bin de config (si el admin lo cambió)
+async function cargarCatalogoRemoto() {
+  try {
+    const cfg = await leerConfig();
+    if (cfg && cfg.config && cfg.config.catalogo) {
+      CATALOGO = cfg.config.catalogo;
+      recalcularBocadillosIds();
+    }
+  } catch(e) {}
+}
 
 // ── ESTADO ────────────────────────────────────────────────────
 let miNombre = '';
@@ -993,11 +1089,25 @@ function seleccionarRol(rol) {
 
 function actualizarBtnEntrar() {
  const nombre = document.getElementById('input-nombre-inicio').value.trim();
- document.getElementById('btn-entrar').disabled = !(nombre && miRol);
+ // El admin no necesita nombre, los demás sí
+ if (miRol === 'admin') {
+   document.getElementById('btn-entrar').disabled = false;
+ } else {
+   document.getElementById('btn-entrar').disabled = !(nombre && miRol);
+ }
 }
 
 function entrar() {
- miNombre = document.getElementById('input-nombre-inicio').value.trim();
+ if (miRol === 'admin') {
+   const clave = prompt('Contraseña de administrador:');
+   if (clave !== ADMIN_PASSWORD) {
+     if (clave !== null) alert('Contraseña incorrecta.');
+     return;
+   }
+   miNombre = 'Admin';
+ } else {
+   miNombre = document.getElementById('input-nombre-inicio').value.trim();
+ }
  // Guardar sesión para sobrevivir a recargas (ej: volver de SumUp)
  try {
    localStorage.setItem('crv-sesion', JSON.stringify({ nombre: miNombre, rol: miRol }));
@@ -1012,6 +1122,18 @@ function arrancarApp() {
  // Mostrar nombre y badge
  document.getElementById('nombre-display').textContent = miNombre;
  const badge = document.getElementById('badge-rol');
+
+ if (miRol === 'admin') {
+ badge.textContent = 'Admin';
+ badge.className = 'badge-rol badge-plancha';
+ document.getElementById('btnHistorial').style.display = 'none';
+ document.getElementById('main-app').classList.add('hidden');
+ document.getElementById('adminPanel').classList.remove('hidden');
+ activarWakeLock();
+ adminVista('caja');
+ return;
+ }
+
  if (miRol === 'camarero') {
  badge.textContent = 'Camarero';
  badge.className = 'badge-rol badge-camarero';
@@ -1022,12 +1144,15 @@ function arrancarApp() {
  document.getElementById('footerTotal').classList.remove('hidden');
  // Ajustar altura del main
  document.getElementById('main-app').style.height = 'calc(100vh - 116px)';
- renderProductos();
- if (cargarComandas()) {
-   renderTabs(); renderComanda(); actualizarBadges();
- } else {
-   crearComanda(sugerirNombre());
- }
+ // Cargar catálogo remoto (precios actualizados por admin) y luego pintar
+ cargarCatalogoRemoto().then(() => {
+   renderProductos();
+   if (cargarComandas()) {
+     renderTabs(); renderComanda(); actualizarBadges();
+   } else {
+     crearComanda(sugerirNombre());
+   }
+ });
  pedirPermiso();
  activarWakeLock();
  // Inicializar con las ya listas para no notificar las antiguas
@@ -1271,6 +1396,7 @@ function confirmarTarjeta() {
   const total = calcTotal(c);
   historial.unshift({ ts: new Date(), nombre: c.nombre, items: [...c.items], total, metodo: 'Tarjeta', paga: null, cambio: null });
   guardarHistorial();
+  registrarEnCajaGlobal(c.nombre, total, 'Tarjeta');
   document.getElementById('modalTarjeta').classList.add('hidden');
   vaciarTrasCobro();
 }
@@ -1338,6 +1464,7 @@ function confirmarEfectivo() {
   const cambio = paga !== null ? paga - total : null;
   historial.unshift({ ts: new Date(), nombre: c.nombre, items: [...c.items], total, metodo: 'Efectivo', paga, cambio });
   guardarHistorial();
+  registrarEnCajaGlobal(c.nombre, total, 'Efectivo');
   document.getElementById('modalEfectivo').classList.add('hidden');
   vaciarTrasCobro();
 }
@@ -1662,8 +1789,187 @@ async function ejecutarEnvioPlancha() {
  }
 }
 
+// ── PANEL ADMINISTRADOR ───────────────────────────────────────
+function adminVista(vista) {
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('activo'));
+  document.getElementById('atab-' + vista).classList.add('activo');
+  if (vista === 'caja') adminVerCaja();
+  else if (vista === 'productos') adminVerProductos();
+  else if (vista === 'comandas') adminVerComandas();
+}
+
+// --- CAJA TOTAL ---
+async function adminVerCaja() {
+  const cont = document.getElementById('adminContenido');
+  cont.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:20px">Cargando caja...</p>';
+  try {
+    const cfg = await leerConfig();
+    const caja = cfg.caja || [];
+    if (!caja.length) {
+      cont.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:20px">Sin ventas registradas todavía</p>';
+      return;
+    }
+    const total = caja.reduce((s,v) => s + v.total, 0);
+    const efectivo = caja.filter(v => v.metodo === 'Efectivo').reduce((s,v) => s + v.total, 0);
+    const tarjeta = caja.filter(v => v.metodo === 'Tarjeta').reduce((s,v) => s + v.total, 0);
+
+    // Caja por camarero
+    const porCamarero = {};
+    caja.forEach(v => { porCamarero[v.camarero] = (porCamarero[v.camarero] || 0) + v.total; });
+
+    let html = `
+      <div style="background:rgba(46,204,113,.1);border:1px solid var(--verde);border-radius:10px;padding:16px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span style="font-family:Oswald,sans-serif;font-size:14px;letter-spacing:2px;color:var(--text-dim)">CAJA TOTAL</span>
+          <span style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:var(--verde-glow)">${fmt(total)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-dim)">
+          <span>Efectivo: <b style="color:#fff">${fmt(efectivo)}</b></span>
+          <span>Tarjeta: <b style="color:#fff">${fmt(tarjeta)}</b></span>
+          <span>${caja.length} ventas</span>
+        </div>
+      </div>
+      <div style="font-family:Oswald,sans-serif;font-size:12px;letter-spacing:2px;color:var(--text-dim);margin:14px 2px 8px">POR CAMARERO</div>`;
+
+    Object.entries(porCamarero).sort((a,b) => b[1]-a[1]).forEach(([nom, t]) => {
+      html += `<div style="display:flex;justify-content:space-between;background:var(--card);border-radius:8px;padding:10px 12px;margin-bottom:6px">
+        <span style="font-weight:700">${nom}</span>
+        <span style="font-family:Oswald,sans-serif;font-weight:700;color:var(--verde-glow)">${fmt(t)}</span>
+      </div>`;
+    });
+
+    html += `<button onclick="adminBorrarCaja()" style="width:100%;padding:10px;background:transparent;border:1px solid var(--rojo);border-radius:8px;color:var(--rojo);font-size:13px;cursor:pointer;margin-top:12px;font-family:Oswald,sans-serif;letter-spacing:1px">BORRAR TODA LA CAJA</button>
+      <button onclick="adminVerCaja()" style="width:100%;padding:8px;background:transparent;border:1px solid #444;border-radius:8px;color:var(--text-dim);font-size:12px;cursor:pointer;margin-top:6px">Actualizar</button>`;
+
+    cont.innerHTML = html;
+  } catch(e) {
+    cont.innerHTML = '<p style="color:var(--rojo);text-align:center;padding:20px">Error al cargar la caja</p>';
+  }
+}
+
+async function adminBorrarCaja() {
+  if (!confirm('¿Borrar TODA la caja de todos los camareros? No se puede deshacer.')) return;
+  try {
+    const cfg = await leerConfig();
+    cfg.caja = [];
+    await escribirConfig(cfg);
+    adminVerCaja();
+  } catch(e) { alert('Error al borrar'); }
+}
+
+// --- PRODUCTOS ---
+async function adminVerProductos() {
+  const cont = document.getElementById('adminContenido');
+  cont.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:20px">Cargando productos...</p>';
+  await cargarCatalogoRemoto();
+
+  let html = '<p style="color:var(--text-dim);font-size:12px;margin-bottom:12px">Edita los precios y pulsa Guardar. Los cambios llegan a todos los camareros.</p>';
+  CATALOGO.forEach((cat, ci) => {
+    html += `<div style="font-family:Oswald,sans-serif;font-size:13px;letter-spacing:2px;color:var(--verde-glow);margin:12px 2px 6px">${cat.cat}</div>`;
+    cat.items.forEach((p, ii) => {
+      html += `<div class="admin-prod-row">
+        <span class="nom">${p.nombre}</span>
+        <input type="number" step="0.5" min="0" value="${p.precio}" id="ap-${ci}-${ii}">
+        <span style="color:var(--text-dim);font-size:12px">€</span>
+      </div>`;
+    });
+  });
+  html += `<button onclick="adminGuardarProductos()" style="width:100%;padding:14px;background:var(--verde);border:none;border-radius:10px;color:#fff;font-family:Oswald,sans-serif;font-size:16px;letter-spacing:2px;cursor:pointer;margin-top:14px">GUARDAR PRECIOS</button>
+    <button onclick="adminResetProductos()" style="width:100%;padding:10px;background:transparent;border:1px solid #444;border-radius:8px;color:var(--text-dim);font-size:12px;cursor:pointer;margin-top:8px">Restaurar precios originales</button>`;
+  cont.innerHTML = html;
+}
+
+async function adminGuardarProductos() {
+  CATALOGO.forEach((cat, ci) => {
+    cat.items.forEach((p, ii) => {
+      const inp = document.getElementById(`ap-${ci}-${ii}`);
+      if (inp) p.precio = parseFloat(inp.value) || 0;
+    });
+  });
+  try {
+    const cfg = await leerConfig();
+    cfg.config = cfg.config || {};
+    cfg.config.catalogo = CATALOGO;
+    await escribirConfig(cfg);
+    recalcularBocadillosIds();
+    alert('Precios guardados. Los camareros los verán al abrir o recargar la app.');
+  } catch(e) { alert('Error al guardar'); }
+}
+
+async function adminResetProductos() {
+  if (!confirm('¿Restaurar los precios y productos originales?')) return;
+  CATALOGO = JSON.parse(JSON.stringify(CATALOGO_DEFECTO));
+  try {
+    const cfg = await leerConfig();
+    cfg.config = cfg.config || {};
+    cfg.config.catalogo = CATALOGO;
+    await escribirConfig(cfg);
+    recalcularBocadillosIds();
+    adminVerProductos();
+  } catch(e) { alert('Error al restaurar'); }
+}
+
+// --- COMANDAS (de la plancha) ---
+async function adminVerComandas() {
+  const cont = document.getElementById('adminContenido');
+  cont.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:20px">Cargando comandas...</p>';
+  try {
+    const r = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`,
+      { headers: { 'X-Master-Key': JSONBIN_API_KEY } });
+    const j = await r.json();
+    const comandas = j.record.comandas || [];
+    if (!comandas.length) {
+      cont.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:20px">No hay comandas en la plancha</p>';
+      return;
+    }
+    let html = `<p style="color:var(--text-dim);font-size:12px;margin-bottom:12px">Todas las comandas de la plancha. Puedes eliminar cualquiera.</p>`;
+    comandas.forEach(c => {
+      const estado = !c.lista ? 'PENDIENTE' : (!c.recogida ? 'ESPERANDO' : 'RECOGIDO');
+      const col = !c.lista ? 'var(--rojo)' : (!c.recogida ? '#f39c12' : '#777');
+      html += `<div style="background:var(--card);border-left:4px solid ${col};border-radius:8px;padding:10px 12px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-weight:700">${c.camarero}${c.mesa?` · ${c.mesa}`:''}</span>
+          <span style="font-size:11px;color:${col};font-family:Oswald,sans-serif;letter-spacing:1px">${estado}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">${c.items.map(i=>`${i.qty}× ${i.nombre}`).join(', ')} · ${c.hora}</div>
+        <button onclick="adminBorrarComanda(${c.id})" style="width:100%;padding:6px;background:transparent;border:1px solid #444;border-radius:6px;color:#888;font-size:12px;cursor:pointer;font-family:Oswald,sans-serif;letter-spacing:1px">ELIMINAR</button>
+      </div>`;
+    });
+    html += `<button onclick="adminVerComandas()" style="width:100%;padding:8px;background:transparent;border:1px solid #444;border-radius:8px;color:var(--text-dim);font-size:12px;cursor:pointer;margin-top:8px">Actualizar</button>`;
+    cont.innerHTML = html;
+  } catch(e) {
+    cont.innerHTML = '<p style="color:var(--rojo);text-align:center;padding:20px">Error al cargar comandas</p>';
+  }
+}
+
+async function adminBorrarComanda(id) {
+  if (!confirm('¿Eliminar esta comanda?')) return;
+  try {
+    const r = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`,
+      { headers: { 'X-Master-Key': JSONBIN_API_KEY } });
+    const j = await r.json();
+    j.record.comandas = (j.record.comandas || []).filter(c => c.id !== id);
+    await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY },
+      body: JSON.stringify(j.record)
+    });
+    adminVerComandas();
+  } catch(e) { alert('Error al eliminar'); }
+}
+
 // ── UTILIDADES ────────────────────────────────────────────────
 function fmt(n) { return n.toFixed(2).replace('.', ',') + ' €'; }
+
+// Registra el cobro en la caja global (segundo bin) para que el admin lo vea
+async function registrarEnCajaGlobal(cliente, total, metodo) {
+  try {
+    const cfg = await leerConfig();
+    cfg.caja = cfg.caja || [];
+    cfg.caja.push({ camarero: miNombre, cliente, total, metodo, ts: Date.now() });
+    await escribirConfig(cfg);
+  } catch(e) {}
+}
 
 // ── NOTIFICACIONES ───────────────────────────────────────────
 async function pedirPermiso() { /* no-op, no usamos push */ }
