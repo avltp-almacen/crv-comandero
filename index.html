@@ -850,10 +850,22 @@
 <!-- MODAL NOMBRE COMANDA -->
 <div class="modal-overlay hidden" id="modalNombre">
  <div class="modal-nombre-box">
- <h2>NUEVA COMANDA</h2>
- <input id="inputNombre" type="text" placeholder="Mesa 1 / Cliente..."
+ <h2>NUEVO CLIENTE</h2>
+ <input id="inputNombre" type="text" placeholder="Nombre del cliente..."
  maxlength="16" onkeydown="if(event.key==='Enter') confirmarNombreComanda()">
  <button class="modal-btn-ok" onclick="confirmarNombreComanda()">ABRIR</button>
+ </div>
+</div>
+
+<!-- MODAL PEDIR NOMBRE AL ENVIAR A PLANCHA -->
+<div class="modal-overlay hidden" id="modalNombrePlancha">
+ <div class="modal-nombre-box">
+ <h2>¿PARA QUIÉN ES?</h2>
+ <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px">Pon un nombre para identificar al cliente al recoger</p>
+ <input id="inputNombrePlancha" type="text" placeholder="Nombre del cliente..."
+ maxlength="16" onkeydown="if(event.key==='Enter') confirmarNombrePlancha()">
+ <button class="modal-btn-ok" onclick="confirmarNombrePlancha()">ENVIAR A PLANCHA</button>
+ <button class="modal-btn-cerrar" onclick="document.getElementById('modalNombrePlancha').classList.add('hidden')" style="margin-top:8px">Cancelar</button>
  </div>
 </div>
 
@@ -1014,7 +1026,7 @@ function arrancarApp() {
  if (cargarComandas()) {
    renderTabs(); renderComanda(); actualizarBadges();
  } else {
-   crearComanda('Mesa 1');
+   crearComanda(sugerirNombre());
  }
  pedirPermiso();
  activarWakeLock();
@@ -1084,7 +1096,7 @@ function renderProductos() {
 
 // ── COMANDAS ──────────────────────────────────────────────────
 function nuevaComanda(silent) {
- if (silent) { crearComanda('Mesa 1'); return; }
+ if (silent) { crearComanda(sugerirNombre()); return; }
  const modal = document.getElementById('modalNombre');
  modal.classList.remove('hidden');
  const inp = document.getElementById('inputNombre');
@@ -1094,8 +1106,8 @@ function nuevaComanda(silent) {
 }
 
 function sugerirNombre() {
- const nums = comandas.map(c => { const m = c.nombre.match(/Mesa (\d+)/); return m ? +m[1] : 0; });
- return `Mesa ${(nums.length ? Math.max(...nums) : 0) + 1}`;
+ const nums = comandas.map(c => { const m = c.nombre.match(/Cliente (\d+)/); return m ? +m[1] : 0; });
+ return `Cliente ${(nums.length ? Math.max(...nums) : 0) + 1}`;
 }
 
 function confirmarNombreComanda() {
@@ -1106,7 +1118,7 @@ function confirmarNombreComanda() {
 }
 
 function crearComanda(nombre) {
- comandas.push({ id: nextId++, nombre, items: [] });
+ comandas.push({ id: nextId++, nombre, items: [], enviada: false });
  activeIdx = comandas.length - 1;
  renderTabs(); renderComanda(); actualizarBadges(); resetCobro();
 }
@@ -1146,6 +1158,8 @@ function addItem(prod, btn) {
  const c = getComanda(); if (!c) return;
  const ex = c.items.find(i => i.id === prod.id);
  ex ? ex.qty++ : c.items.push({ ...prod, qty: 1 });
+ // Si se añade un bocadillo/montado a una comanda ya enviada, hay que reenviar
+ if (c.enviada && BOCADILLOS_IDS.includes(prod.id)) c.enviada = false;
  // Animación flotante
  const rect = btn.getBoundingClientRect();
  const anim = document.createElement('div');
@@ -1167,6 +1181,8 @@ function cambiarQty(itemId, delta) {
  const ex = c.items.find(i => i.id === itemId); if (!ex) return;
  ex.qty += delta;
  if (ex.qty <= 0) c.items = c.items.filter(i => i.id !== itemId);
+ // Si se aumenta un bocadillo/montado en comanda ya enviada, hay que reenviar
+ if (c.enviada && delta > 0 && BOCADILLOS_IDS.includes(itemId)) c.enviada = false;
  renderComanda(); actualizarBadges();
 }
 
@@ -1220,6 +1236,14 @@ const SUMUP_APP_ID = 'https://avltp-almacen.github.io/crv-comandero/';
 
 function abrirModalMetodo() {
   const c = getComanda(); if (!c || !c.items.length) return;
+
+  // Regla: si hay bocadillos/montados y NO se ha enviado a plancha, bloquear
+  const tieneBocatas = c.items.some(i => BOCADILLOS_IDS.includes(i.id));
+  if (tieneBocatas && !c.enviada) {
+    alert('Esta comanda tiene bocadillos. Antes de cobrar tienes que enviarla a la plancha.');
+    return;
+  }
+
   const total = calcTotal(c);
   document.getElementById('metodoResumen').textContent = c.items.map(i=>`${i.qty}× ${i.nombre}`).join(', ');
   document.getElementById('metodoTotal').textContent = fmt(total);
@@ -1460,7 +1484,7 @@ function renderComandasPlancha(comandas) {
  const card = (c) => `
  <div style="background:var(--card);border-left:4px solid ${colorBorde(c)};border-radius:10px;padding:12px;margin-bottom:8px;opacity:${c.recogida?'.45':'1'}">
  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
- <span style="font-family:Oswald,sans-serif;font-size:1.3rem;color:${!c.lista?'var(--verde-glow)':(!c.recogida?'#f39c12':'#777')}">${c.camarero}</span>
+ <span style="font-family:Oswald,sans-serif;font-size:1.3rem;color:${!c.lista?'var(--verde-glow)':(!c.recogida?'#f39c12':'#777')}">${c.camarero}${c.mesa ? ` · ${c.mesa}` : ''}</span>
  <span style="font-size:0.75rem;color:#555">${c.hora}</span>
  </div>
  <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
@@ -1576,6 +1600,33 @@ async function enviarAPlancha() {
  const bocatas = c.items.filter(i => BOCADILLOS_IDS.includes(i.id));
  if (!bocatas.length) { alert('No hay bocadillos ni montados en esta comanda.'); return; }
 
+ // Si el nombre es autogenerado (Cliente N) o vacío, pedir nombre real
+ const nombreAuto = /^Cliente \d+$/.test(c.nombre) || !c.nombre.trim();
+ if (nombreAuto) {
+   const inp = document.getElementById('inputNombrePlancha');
+   inp.value = '';
+   document.getElementById('modalNombrePlancha').classList.remove('hidden');
+   setTimeout(() => inp.focus(), 80);
+   return;
+ }
+ ejecutarEnvioPlancha();
+}
+
+function confirmarNombrePlancha() {
+ const nombre = document.getElementById('inputNombrePlancha').value.trim();
+ if (!nombre) { alert('Tienes que poner un nombre para el cliente.'); return; }
+ const c = getComanda();
+ if (c) { c.nombre = nombre; renderTabs(); guardarComandas(); }
+ document.getElementById('modalNombrePlancha').classList.add('hidden');
+ ejecutarEnvioPlancha();
+}
+
+async function ejecutarEnvioPlancha() {
+ const c = getComanda();
+ if (!c || !c.items.length) return;
+ const bocatas = c.items.filter(i => BOCADILLOS_IDS.includes(i.id));
+ if (!bocatas.length) return;
+
  const btn = document.getElementById('btnPlancha');
  btn.disabled = true; btn.textContent = 'ENVIANDO...';
 
@@ -1588,7 +1639,7 @@ async function enviarAPlancha() {
  const nuevaId = Date.now();
  registrarEnviada(nuevaId);
  data.comandas.unshift({
- id: nuevaId, camarero: miNombre,
+ id: nuevaId, camarero: miNombre, mesa: c.nombre,
  items: bocatas.map(i => ({
  nombre: i.nombre + (i.id.endsWith('-m') || i.id.endsWith('-qm') ? ' (montado)' : ''),
  qty: i.qty
@@ -1601,6 +1652,8 @@ async function enviarAPlancha() {
  headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY },
  body: JSON.stringify(data)
  });
+ // Marcar la comanda como enviada a plancha
+ if (c) { c.enviada = true; guardarComandas(); }
  btn.textContent = 'ENVIADO';
  setTimeout(() => { btn.textContent = 'A PLANCHA'; btn.disabled = false; }, 2000);
  } catch(e) {
@@ -1661,9 +1714,9 @@ function notificarConRecogida(c) {
  const aviso = document.createElement('div');
  aviso.id = 'aviso-listo';
  aviso.innerHTML = `
- <div style="font-size:2.5rem;margin-bottom:8px"></div>
- <div style="font-family:Oswald,sans-serif;font-size:1.4rem;letter-spacing:2px;color:#fff;margin-bottom:6px">¡TUS BOCATAS LISTOS!</div>
- <div style="font-size:0.9rem;color:#ccc;margin-bottom:20px">${c.items.map(i=>`${i.qty}× ${i.nombre}`).join(', ')}</div>
+ <div style="font-family:Oswald,sans-serif;font-size:1rem;letter-spacing:3px;color:var(--verde-glow);margin-bottom:4px">LISTO PARA</div>
+ <div style="font-family:Oswald,sans-serif;font-size:3rem;font-weight:700;letter-spacing:1px;color:#fff;margin-bottom:14px;line-height:1">${c.mesa || 'Tu comanda'}</div>
+ <div style="font-size:0.95rem;color:#ccc;margin-bottom:20px">${c.items.map(i=>`${i.qty}× ${i.nombre}`).join(', ')}</div>
  <button onclick="marcarRecogidaCamarero(${c.id})"
  style="width:100%;max-width:260px;background:var(--verde);border:none;border-radius:10px;padding:14px;
  font-family:Oswald,sans-serif;font-size:1.1rem;letter-spacing:2px;color:#fff;cursor:pointer;margin-bottom:10px">
