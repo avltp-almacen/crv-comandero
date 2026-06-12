@@ -1003,6 +1003,14 @@ window.dispatchEvent(new Event('firebase-listo'));
 // ── CONFIGURACIÓN ─────────────────────────────────────────────
 const ADMIN_PASSWORD = 'crv2026';
 
+// Red de seguridad: ningún error suelto debe tumbar la app
+window.addEventListener('error', (e) => {
+  console.warn('Error capturado (ignorado para no romper la app):', e.message);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.warn('Promesa rechazada (ignorada):', e.reason);
+});
+
 // Lee la config (catálogo + caja) desde Firebase
 async function leerConfig() {
   const cfg = await window.FB.leer('config');
@@ -1032,7 +1040,7 @@ const CATALOGO_DEFECTO = [
  { id:"mini-tinto", nombre:"Mini tinto verano", precio:6.00 },
  { id:"mini-kalimotxo", nombre:"Mini kalimotxo", precio:6.00 },
  { id:"cubata", nombre:"Cubata", precio:6.00 },
- { id:"mini-cubata", nombre:"Mini cubata", precio:12.00 },
+ { id:"mini-cubata", nombre:"Mini cubata", precio:11.00 },
  { id:"doble-28030", nombre:"Doble 28030", precio:5.50 },
  { id:"mini-28030", nombre:"Mini 28030", precio:8.00 },
  ]},
@@ -1585,26 +1593,48 @@ function iniciarPlancha() {
  activarWakeLock();
  // Escucha en tiempo real: cualquier cambio en comandas actualiza la vista al instante
  window.FB.escuchar('comandas', (data) => {
-   const comandas = firebaseAObjArray(data);
-   // Detectar pedidos nuevos (pendientes que no estaban antes)
-   const pendientesAhora = comandas.filter(c => !c.lista).map(c => c.key);
-   if (planchaInicializada) {
-     const hayNuevo = pendientesAhora.some(k => !idsPendientesPlancha.has(k));
-     if (hayNuevo) avisoPlanchaPedido();
+   try {
+     const comandas = firebaseAObjArray(data);
+     // Detectar pedidos nuevos (pendientes que no estaban antes)
+     const pendientesAhora = comandas.filter(c => !c.lista).map(c => c.key);
+     if (planchaInicializada) {
+       const hayNuevo = pendientesAhora.some(k => !idsPendientesPlancha.has(k));
+       if (hayNuevo) avisoPlanchaPedido();
+     }
+     idsPendientesPlancha = new Set(pendientesAhora);
+     planchaInicializada = true;
+     renderComandasPlancha(comandas);
+   } catch(e) {
+     console.warn('Error procesando comandas plancha:', e);
    }
-   idsPendientesPlancha = new Set(pendientesAhora);
-   planchaInicializada = true;
-   renderComandasPlancha(comandas);
  });
 }
 
 // Convierte el objeto de Firebase {key:obj} en array con .key incluido, ordenado por hora de creación
 function firebaseAObjArray(data) {
- if (!data) return [];
- return Object.entries(data)
-   .map(([key, val]) => ({ ...val, key }))
-   .filter(c => c && Array.isArray(c.items))
-   .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+ if (!data || typeof data !== 'object') return [];
+ try {
+   return Object.entries(data)
+     .map(([key, val]) => {
+       if (!val || typeof val !== 'object') return null;
+       // Normalizar: garantizar que todos los campos existen y tienen el tipo correcto
+       return {
+         key,
+         camarero: typeof val.camarero === 'string' ? val.camarero : '???',
+         mesa: typeof val.mesa === 'string' ? val.mesa : '',
+         items: Array.isArray(val.items) ? val.items.filter(i => i && typeof i.nombre === 'string') : [],
+         hora: typeof val.hora === 'string' ? val.hora : '',
+         ts: typeof val.ts === 'number' ? val.ts : 0,
+         lista: !!val.lista,
+         recogida: !!val.recogida
+       };
+     })
+     .filter(c => c && c.items.length > 0)
+     .sort((a, b) => b.ts - a.ts);
+ } catch(e) {
+   console.warn('Error parseando comandas:', e);
+   return [];
+ }
 }
 
 function avisoPlanchaPedido() {
@@ -1642,8 +1672,10 @@ async function activarWakeLock() {
 
 function renderComandasPlancha(comandas) {
  const sec = document.getElementById('productosSection');
+ if (!sec) return;
+ try {
  // Filtrar comandas mal formadas (sin items) para evitar errores
- comandas = comandas.filter(c => c && Array.isArray(c.items));
+ comandas = (comandas || []).filter(c => c && Array.isArray(c.items) && c.items.length);
  const pendientes = comandas.filter(c => !c.lista);
  const esperando = comandas.filter(c => c.lista && !c.recogida);
  const recogidas = comandas.filter(c => c.lista && c.recogida);
@@ -1659,14 +1691,22 @@ function renderComandasPlancha(comandas) {
  return 'var(--verde)';
  };
 
+ const esc = (s) => String(s == null ? '' : s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+ const itemsHtml = (c) => c.items.map(i => {
+   const qty = (i && i.qty != null) ? i.qty : '?';
+   const nom = (i && i.nombre != null) ? esc(i.nombre) : '';
+   return `<span style="background:var(--card2);border-radius:6px;padding:3px 7px;font-size:0.8rem;font-weight:700"><span style="color:var(--rojo)">${qty}×</span>${nom}</span>`;
+ }).join('');
+
  const card = (c) => `
  <div style="background:var(--card);border-left:4px solid ${colorBorde(c)};border-radius:10px;padding:12px;margin-bottom:8px;opacity:${c.recogida?'.45':'1'}">
  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
- <span style="font-family:Oswald,sans-serif;font-size:1.3rem;color:${!c.lista?'var(--verde-glow)':(!c.recogida?'#f39c12':'#777')}">${c.camarero}${c.mesa ? ` · ${c.mesa}` : ''}</span>
- <span style="font-size:0.75rem;color:#555">${c.hora}</span>
+ <span style="font-family:Oswald,sans-serif;font-size:1.3rem;color:${!c.lista?'var(--verde-glow)':(!c.recogida?'#f39c12':'#777')}">${esc(c.camarero)}${c.mesa ? ` · ${esc(c.mesa)}` : ''}</span>
+ <span style="font-size:0.75rem;color:#555">${esc(c.hora)}</span>
  </div>
  <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
- ${c.items.map(i=>`<span style="background:var(--card2);border-radius:6px;padding:3px 7px;font-size:0.8rem;font-weight:700"><span style="color:var(--rojo)">${i.qty}×</span>${i.nombre}</span>`).join('')}
+ ${itemsHtml(c)}
  </div>
  <div style="display:flex;gap:6px">
  ${!c.lista
@@ -1700,6 +1740,11 @@ function renderComandasPlancha(comandas) {
  }
 
  sec.innerHTML = resultado;
+ } catch(e) {
+   console.warn('Error renderizando plancha:', e);
+   // No dejar la pantalla en blanco: mostrar mensaje y permitir seguir
+   sec.innerHTML = '<div style="padding:2rem 1rem;text-align:center;color:var(--text-dim)">Cargando comandas...</div>';
+ }
 }
 
 async function marcarListo(key) {
@@ -2064,6 +2109,7 @@ function registrarEnviada(id) { /* ya no necesario */ }
 
 function iniciarEscuchaCamarero() {
  window.FB.escuchar('comandas', (data) => {
+   try {
    const comandas = firebaseAObjArray(data);
    // En la primera carga, marcar las ya listas para no avisar de las viejas
    if (!camareroEscuchaInic) {
@@ -2082,6 +2128,9 @@ function iniciarEscuchaCamarero() {
        notificarConRecogida(c);
      }
    });
+   } catch(e) {
+     console.warn('Error en escucha camarero:', e);
+   }
  });
 }
 
