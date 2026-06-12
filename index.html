@@ -1784,17 +1784,14 @@ async function enviarAPlancha() {
  const bocatas = c.items.filter(i => BOCADILLOS_IDS.includes(i.id));
  if (!bocatas.length) { alert('No hay bocadillos ni montados en esta comanda.'); return; }
 
- // Si el nombre es autogenerado (Cliente N) o vacío, pedir nombre real
+ // Pedir SIEMPRE el nombre del cliente al enviar a plancha
+ const inp = document.getElementById('inputNombrePlancha');
  const nombreLimpio = (c.nombre || '').trim();
- const nombreAuto = !nombreLimpio || /^cliente\s*\d*$/i.test(nombreLimpio);
- if (nombreAuto) {
-   const inp = document.getElementById('inputNombrePlancha');
-   inp.value = '';
-   document.getElementById('modalNombrePlancha').classList.remove('hidden');
-   setTimeout(() => inp.focus(), 80);
-   return;
- }
- ejecutarEnvioPlancha();
+ const esAuto = !nombreLimpio || /^cliente\s*\d*$/i.test(nombreLimpio);
+ // Si ya tiene un nombre real puesto, lo precargamos para confirmar rápido
+ inp.value = esAuto ? '' : nombreLimpio;
+ document.getElementById('modalNombrePlancha').classList.remove('hidden');
+ setTimeout(() => { inp.focus(); inp.select(); }, 80);
 }
 
 function confirmarNombrePlancha() {
