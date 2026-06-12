@@ -1032,7 +1032,7 @@ const CATALOGO_DEFECTO = [
  { id:"mini-tinto", nombre:"Mini tinto verano", precio:6.00 },
  { id:"mini-kalimotxo", nombre:"Mini kalimotxo", precio:6.00 },
  { id:"cubata", nombre:"Cubata", precio:6.00 },
- { id:"mini-cubata", nombre:"Mini cubata", precio:12.00 },
+ { id:"mini-cubata", nombre:"Mini cubata", precio:11.00 },
  { id:"doble-28030", nombre:"Doble 28030", precio:5.50 },
  { id:"mini-28030", nombre:"Mini 28030", precio:8.00 },
  ]},
@@ -1641,6 +1641,8 @@ async function activarWakeLock() {
 
 function renderComandasPlancha(comandas) {
  const sec = document.getElementById('productosSection');
+ // Filtrar comandas mal formadas (sin items) para evitar errores
+ comandas = comandas.filter(c => c && Array.isArray(c.items));
  const pendientes = comandas.filter(c => !c.lista);
  const esperando = comandas.filter(c => c.lista && !c.recogida);
  const recogidas = comandas.filter(c => c.lista && c.recogida);
