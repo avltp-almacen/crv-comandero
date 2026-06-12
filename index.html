@@ -1603,6 +1603,7 @@ function firebaseAObjArray(data) {
  if (!data) return [];
  return Object.entries(data)
    .map(([key, val]) => ({ ...val, key }))
+   .filter(c => c && Array.isArray(c.items))
    .sort((a, b) => (b.ts || 0) - (a.ts || 0));
 }
 
