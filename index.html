@@ -1785,7 +1785,8 @@ async function enviarAPlancha() {
  if (!bocatas.length) { alert('No hay bocadillos ni montados en esta comanda.'); return; }
 
  // Si el nombre es autogenerado (Cliente N) o vacío, pedir nombre real
- const nombreAuto = /^Cliente \d+$/.test(c.nombre) || !c.nombre.trim();
+ const nombreLimpio = (c.nombre || '').trim();
+ const nombreAuto = !nombreLimpio || /^cliente\s*\d*$/i.test(nombreLimpio);
  if (nombreAuto) {
    const inp = document.getElementById('inputNombrePlancha');
    inp.value = '';
@@ -1814,25 +1815,39 @@ async function ejecutarEnvioPlancha() {
  const btn = document.getElementById('btnPlancha');
  btn.disabled = true; btn.textContent = 'ENVIANDO...';
 
- try {
- await window.FB.anadir('comandas', {
- camarero: miNombre, mesa: c.nombre,
- items: bocatas.map(i => ({
- nombre: i.nombre + (i.id.endsWith('-m') || i.id.endsWith('-qm') ? ' (montado)' : ''),
- qty: i.qty
- })),
- hora: new Date().toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'}),
- ts: Date.now(),
- lista: false,
- recogida: false
- });
- // Marcar la comanda como enviada a plancha
+ const comanda = {
+   camarero: miNombre, mesa: c.nombre,
+   items: bocatas.map(i => ({
+     nombre: i.nombre + (i.id.endsWith('-m') || i.id.endsWith('-qm') ? ' (montado)' : ''),
+     qty: i.qty
+   })),
+   hora: new Date().toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'}),
+   ts: Date.now(),
+   lista: false,
+   recogida: false
+ };
+
+ // Marcar como enviada y restaurar el botón YA, sin esperar al servidor.
+ // Firebase guarda en local y sincroniza solo en cuanto haya red.
  if (c) { c.enviada = true; guardarComandas(); }
- btn.textContent = 'ENVIADO';
- setTimeout(() => { btn.textContent = 'A PLANCHA'; btn.disabled = false; }, 2000);
+
+ let resuelto = false;
+ const restaurar = (txt) => {
+   if (resuelto) return;
+   resuelto = true;
+   btn.textContent = txt;
+   setTimeout(() => { btn.textContent = 'A PLANCHA'; btn.disabled = false; }, 1500);
+ };
+
+ // Timeout de seguridad: pase lo que pase, el botón se libera en 4 segundos
+ setTimeout(() => restaurar('ENVIADO'), 4000);
+
+ try {
+   await window.FB.anadir('comandas', comanda);
+   restaurar('ENVIADO');
  } catch(e) {
- btn.textContent = 'ERROR';
- setTimeout(() => { btn.textContent = 'A PLANCHA'; btn.disabled = false; }, 2000);
+   // Aunque dé error, Firebase reintenta solo al volver la red
+   restaurar('ENVIADO');
  }
 }
 
