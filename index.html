@@ -945,6 +945,42 @@
  </div>
 </div>
 
+<script>
+// ── DETECCIÓN DE NAVEGADOR EMBEBIDO (WhatsApp, Instagram, etc.) ─
+(function() {
+  const ua = navigator.userAgent || '';
+  const embebido = /FBAN|FBAV|Instagram|Line\/|WhatsApp|wv\)/.test(ua) ||
+                   (/(iPhone|iPod|iPad).*AppleWebKit(?!.*Safari)/.test(ua));
+  window.__navEmbebido = embebido;
+})();
+
+// Red de seguridad: si Firebase no carga en 8 segundos, avisar al usuario
+window.__firebaseOK = false;
+setTimeout(function() {
+  if (!window.__firebaseOK) {
+    mostrarAvisoNavegador();
+  }
+}, 8000);
+
+function mostrarAvisoNavegador() {
+  if (document.getElementById('aviso-navegador')) return;
+  const div = document.createElement('div');
+  div.id = 'aviso-navegador';
+  div.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#0a0a0a;color:#f0f0f0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2rem;font-family:sans-serif';
+  div.innerHTML = `
+    <div style="font-size:2.5rem;margin-bottom:12px">⚠️</div>
+    <h2 style="color:#2ecc71;font-size:1.3rem;margin-bottom:14px;letter-spacing:1px">ABRE EN TU NAVEGADOR</h2>
+    <p style="font-size:0.95rem;color:#ccc;max-width:300px;line-height:1.5;margin-bottom:20px">
+      Esta app no funciona dentro de WhatsApp o Instagram.<br><br>
+      Pulsa los <b>tres puntos</b> (arriba a la derecha) y elige
+      <b>"Abrir en Chrome"</b> o <b>"Abrir en el navegador"</b>.
+    </p>
+    <button onclick="location.reload()" style="background:#1a6b2e;border:none;border-radius:10px;padding:12px 28px;color:#fff;font-size:1rem;font-weight:700;cursor:pointer;letter-spacing:1px">REINTENTAR</button>
+    <p style="font-size:0.8rem;color:#777;margin-top:20px;max-width:280px">Si ya estás en Chrome o Safari y ves esto, revisa tu conexión a internet y pulsa Reintentar.</p>`;
+  document.body.appendChild(div);
+}
+</script>
+
 <script type="module">
 // ── FIREBASE ──────────────────────────────────────────────────
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -996,6 +1032,7 @@ window.FB = {
     });
   }
 };
+window.__firebaseOK = true;
 window.dispatchEvent(new Event('firebase-listo'));
 </script>
 
@@ -1155,6 +1192,15 @@ function actualizarBtnEntrar() {
 }
 
 function entrar() {
+ // Si Firebase aún no cargó, no dejar entrar a ciegas: avisar
+ if (!window.FB) {
+   if (window.__navEmbebido) {
+     mostrarAvisoNavegador();
+   } else {
+     alert('Cargando... espera unos segundos y vuelve a pulsar ENTRAR. Si no, revisa tu conexión.');
+   }
+   return;
+ }
  if (miRol === 'admin') {
    const clave = prompt('Contraseña de administrador:');
    if (clave !== ADMIN_PASSWORD) {
@@ -1971,16 +2017,24 @@ async function adminVerComandas() {
       cont.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:20px">No hay comandas en la plancha</p>';
       return;
     }
-    let html = `<p style="color:var(--text-dim);font-size:12px;margin-bottom:12px">Todas las comandas de la plancha. Puedes eliminar cualquiera.</p>`;
+    let html = `<p style="color:var(--text-dim);font-size:12px;margin-bottom:12px">Todas las comandas de la plancha. Pulsa un estado para cambiarlo o elimina la comanda.</p>`;
     comandas.forEach(c => {
       const estado = !c.lista ? 'PENDIENTE' : (!c.recogida ? 'ESPERANDO' : 'RECOGIDO');
       const col = !c.lista ? 'var(--rojo)' : (!c.recogida ? '#f39c12' : '#777');
+      // Estilo de cada botón de estado: resaltado si es el actual
+      const btnEstado = (label, activo, color, accion) =>
+        `<button onclick="${accion}" style="flex:1;padding:7px 4px;border-radius:6px;font-size:11px;font-family:Oswald,sans-serif;letter-spacing:1px;cursor:pointer;border:1px solid ${color};${activo?`background:${color};color:#fff`:`background:transparent;color:${color}`}">${label}</button>`;
       html += `<div style="background:var(--card);border-left:4px solid ${col};border-radius:8px;padding:10px 12px;margin-bottom:6px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
           <span style="font-weight:700">${c.camarero}${c.mesa?` · ${c.mesa}`:''}</span>
           <span style="font-size:11px;color:${col};font-family:Oswald,sans-serif;letter-spacing:1px">${estado}</span>
         </div>
         <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">${c.items.map(i=>`${i.qty}× ${i.nombre}`).join(', ')} · ${c.hora}</div>
+        <div style="display:flex;gap:5px;margin-bottom:6px">
+          ${btnEstado('PENDIENTE', !c.lista, 'var(--rojo)', `adminCambiarEstado('${c.key}','pendiente')`)}
+          ${btnEstado('LISTO', c.lista && !c.recogida, '#f39c12', `adminCambiarEstado('${c.key}','listo')`)}
+          ${btnEstado('RECOGIDO', c.lista && c.recogida, 'var(--verde)', `adminCambiarEstado('${c.key}','recogido')`)}
+        </div>
         <button onclick="adminBorrarComanda('${c.key}')" style="width:100%;padding:6px;background:transparent;border:1px solid #444;border-radius:6px;color:#888;font-size:12px;cursor:pointer;font-family:Oswald,sans-serif;letter-spacing:1px">ELIMINAR</button>
       </div>`;
     });
@@ -1989,6 +2043,18 @@ async function adminVerComandas() {
   } catch(e) {
     cont.innerHTML = '<p style="color:var(--rojo);text-align:center;padding:20px">Error al cargar comandas</p>';
   }
+}
+
+async function adminCambiarEstado(key, nuevoEstado) {
+  try {
+    let cambios;
+    if (nuevoEstado === 'pendiente') cambios = { lista: false, recogida: false };
+    else if (nuevoEstado === 'listo') cambios = { lista: true, recogida: false };
+    else if (nuevoEstado === 'recogido') cambios = { lista: true, recogida: true };
+    else return;
+    await window.FB.actualizar('comandas/' + key, cambios);
+    adminVerComandas();
+  } catch(e) { alert('Error al cambiar el estado'); }
 }
 
 async function adminBorrarComanda(key) {
