@@ -141,8 +141,7 @@
  display: flex;
  align-items: center;
  justify-content: space-between;
- position: sticky;
- top: 0;
+ flex-shrink: 0;
  z-index: 100;
  border-bottom: 2px solid #1a6b2e;
  }
@@ -256,6 +255,7 @@
  overflow-x: auto;
  scrollbar-width: none;
  border-bottom: 2px solid #222;
+ flex-shrink: 0;
  }
  .tabs-wrap::-webkit-scrollbar { display: none; }
 
@@ -305,16 +305,25 @@
  .tab-new:active { border-color: var(--verde-glow); color: var(--verde-glow); }
 
  /* ── MAIN ── */
+ #app-principal {
+ display: flex;
+ flex-direction: column;
+ height: 100vh;
+ height: 100dvh;
+ overflow: hidden;
+ }
  .main {
  display: flex;
  flex-direction: column;
- height: calc(100vh - 116px);
+ flex: 1;
+ min-height: 0;
  overflow: hidden;
  }
 
  /* ── PRODUCTOS: scroll solo aquí ── */
  .productos-section {
  flex: 1;
+ min-height: 0;
  overflow-y: auto;
  overflow-x: hidden;
  padding: 8px;
@@ -857,7 +866,7 @@
 </div>
 
 <!-- ── PANEL ADMINISTRADOR ── -->
-<div id="adminPanel" class="hidden" style="padding:12px;overflow-y:auto;height:calc(100vh - 72px)">
+<div id="adminPanel" class="hidden" style="padding:12px;overflow-y:auto;flex:1;min-height:0">
  <div style="display:flex;gap:6px;margin-bottom:14px">
   <button class="admin-tab activo" id="atab-caja" onclick="adminVista('caja')">CAJA TOTAL</button>
   <button class="admin-tab" id="atab-productos" onclick="adminVista('productos')">PRODUCTOS</button>
@@ -1260,7 +1269,6 @@ function arrancarApp() {
  document.getElementById('comandaPanel').classList.remove('hidden');
  document.getElementById('footerTotal').classList.remove('hidden');
  // Ajustar altura del main
- document.getElementById('main-app').style.height = 'calc(100vh - 116px)';
  // Cargar catálogo remoto (precios actualizados por admin) y luego pintar
  cargarCatalogoRemoto().then(() => {
    renderProductos();
@@ -1281,7 +1289,6 @@ function arrancarApp() {
  // Plancha: solo ver productos sin acción, y polling de comandas
  document.getElementById('productosSection').innerHTML =
  '<div style="padding:2rem 1rem;text-align:center;color:var(--text-dim)">Vista cocina — comandas en tiempo real</div>';
- document.getElementById('main-app').style.height = 'calc(100vh - 72px)';
  iniciarPlancha();
  }
 }
